@@ -35,13 +35,13 @@ class Issue(models.Model):
     
     resolved_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
+    version = models.IntegerField(default=1)
 
     def __str__(self):
         return f"{self.id} {self.title} {self.status}"
 
     class Meta:
         db_table = 'issues'
-      
 
 class Comment(models.Model):
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name='comments')

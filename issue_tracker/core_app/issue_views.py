@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from .helpers import CustomCursorPagination
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, F
 import pandas as pd
 from django.utils import timezone
 
@@ -108,7 +108,66 @@ class IssueViewSet(viewsets.ViewSet):
 
 
     def update(self, request, pk=None):
-        pass
+        data=request.data.copy()
+        user_version = data.pop('version', None)
+        is_deleted = data.pop('is_deleted', False)
+        if not user_version:
+            return Response(
+                {"error": "Please provide version"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        label_update=False
+        if 'labels' in data:
+            label_ids = data.pop('labels', [])
+            label_update=True
+       
+        assignee_id = data.pop('assignee_id', None)
+        if assignee_id:
+            if not User.objects.filter(id=assignee_id).exists():
+                return Response(
+                    {"error": f"Assignee with id {assignee_id} does not exist"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            data['assignee_id']=assignee_id
+        
+
+        if label_ids:
+            exsitng_label_ids=Label.objects.filter(is_deleted=False).values_list('id',flat=True)
+            not_existing_label_ids=[]
+            for label_id in label_ids:
+                if label_id not in exsitng_label_ids:
+                    not_existing_label_ids.append(label_id)
+            if not_existing_label_ids:
+                return Response(
+                    {"error": f"lable with ids {not_existing_label_ids} does not exist"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        with transaction.atomic():
+            updated_rows = (
+                Issue.objects
+                .filter(id=pk, is_deleted=False, version=user_version)
+                .update(
+                    **data,
+                    version=    F("version") + 1,
+                    updated_by=request.user,
+                )
+            )
+            # print(updated_rows,"updated_rows")
+            if updated_rows == 0:
+                return Response(
+                    {"error": "Conflict: issue already updated by another user"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            issue = Issue.objects.get(id=pk)
+            if label_update:
+                issue.labels.set(label_ids)
+
+        return Response(
+            {"message": "Issue updated successfully", "issue_id": issue.id},
+            status=status.HTTP_200_OK,
+        )
+
+
     def destroy(self, request, pk=None):
         issue=Issue.objects.filter(id=pk, is_deleted=False)
         if not issue.exists():
@@ -188,7 +247,6 @@ class IssueViewSet(viewsets.ViewSet):
         )
 
     def bulk_status(self, request):
-        try:
             ids = request.data.get('ids', [])
             new_status = request.data.get('status')
 
@@ -223,15 +281,13 @@ class IssueViewSet(viewsets.ViewSet):
                     "message": f"Successfully updated {updated_count} issues to {new_status}"
                 }, status=200)
 
-        except Exception as e:
-            return Response({"error": f"Transaction failed: {str(e)}"}, status=500)
 
 
 class IssueImportandReportView(viewsets.ViewSet):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
+    @transaction.atomic()
     def import_csv(self, request):
         try:
             csv_file = request.FILES.get('file')

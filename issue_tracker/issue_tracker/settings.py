@@ -82,14 +82,14 @@ WSGI_APPLICATION = 'issue_tracker.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE') or os.getenv('LOCAL_PG_DB_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': os.getenv('DB_NAME') or os.getenv('LOCAL_PG_DB_NAME', BASE_DIR / 'db.sqlite3'),
-        'USER': os.getenv('DB_USER') or os.getenv('LOCAL_PG_DB_USER', ''),
-        'PASSWORD': os.getenv('DB_PASSWORD') or os.getenv('LOCAL_PG_DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST') or os.getenv('LOCAL_PG_DB_HOST', ''),
-        'PORT': os.getenv('DB_PORT') or os.getenv('LOCAL_PG_DB_PORT', ''),
+        'ENGINE': os.getenv('DB_ENGINE','django.db.backends.postgresql'),
+        'NAME': os.getenv('DB_NAME', 'issue_tracker_db'),
+        'USER': os.getenv('DB_USER','postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD','root'),
+        'HOST': os.getenv('DB_HOST','localhost'),
+        'PORT': os.getenv('DB_PORT','5432'),
         'OPTIONS': {
-            'sslmode': os.getenv('DB_SSLMODE') or os.getenv('LOCAL_PG_DB_SSLMODE', 'prefer'),
+            'sslmode': os.getenv('DB_SSLMODE','prefer'),
         }
     }
     }
