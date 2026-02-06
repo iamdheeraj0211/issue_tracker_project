@@ -6,6 +6,8 @@ from rest_framework.response import Response
 
 from .helpers import CustomCursorPagination
 from django.db import transaction
+import pandas as pd
+from django.utils import timezone
 
 class IssueViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -107,7 +109,20 @@ class IssueViewSet(viewsets.ViewSet):
     def update(self, request, pk=None):
         pass
     def destroy(self, request, pk=None):
-        pass
+        issue=Issue.objects.filter(id=pk, is_deleted=False)
+        if not issue.exists():
+            return Response(
+                {"error": "Issue not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        issue.update(
+            is_deleted=True,
+            updated_by=request.user,
+        )
+        return Response(
+            {"message": f"Issue with id {pk} deleted successfully"}, 
+            status=status.HTTP_200_OK
+        )
 
     def add_comment(self, request, pk=None):
         comment = request.data.pop('comment')
@@ -195,12 +210,13 @@ class IssueViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )   
 
-            # 3. Transactional Block
             with transaction.atomic():
-                # Filter issues that exist and are in the ID list
                 to_update_qs = existing_qs.filter(id__in=ids)
                 updated_count=to_update_qs.count()
-                to_update_qs.update(status=new_status)
+                if new_status=="resolved":
+                    to_update_qs.update(status=new_status,resolved_at=timezone.now())
+                else:
+                    to_update_qs.update(status=new_status)
                 
                 return Response({
                     "message": f"Successfully updated {updated_count} issues to {new_status}"
@@ -208,3 +224,130 @@ class IssueViewSet(viewsets.ViewSet):
 
         except Exception as e:
             return Response({"error": f"Transaction failed: {str(e)}"}, status=500)
+
+
+class IssueImportandReportView(viewsets.ViewSet):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def import_csv(self, request):
+        try:
+            csv_file = request.FILES.get('file')
+            if not csv_file:
+                return Response(
+                    {"error": "Please provide a CSV or Excel file"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            file_type=csv_file.name.split('.')[-1]
+            if file_type not in ['csv','xlsx']:
+                return Response(
+                    {"error": "Please provide a CSV or Excel file"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if file_type=='csv':
+                df = pd.read_csv(csv_file)
+            else:
+                df = pd.read_excel(csv_file)
+            required_columns=['title','description','status','labels']
+            if not all(col in df.columns for col in required_columns):
+                return Response(
+                    {"error": f"Please provide all required columns {required_columns}"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            status_choices=[choice[0] for choice in Issue.STATUS_CHOICES]
+
+            label_qs=Label.objects.filter(is_deleted=False).values('id','name')
+            label_dict_map={item['name'].lower():item['id'] for item in label_qs}
+
+            user_qs=User.objects.filter(is_active=True).values('id','username')
+            user_dict_map={item['username'].lower():item['id'] for item in user_qs} 
+            error_Details=[]
+            objects_to_create=[]
+            if len(df)==0:
+                return Response(
+                    {"error": "Please provide data in the file"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            for index, row in df.iterrows():
+                title = row.get('title')
+                if not title or pd.isna(title):
+                    error_Details.append({"error": f"Please provide title for row {index}"})
+                    continue
+                
+                description = row.get('description')
+                
+                if not description or pd.isna(description):
+                    error_Details.append({"error": f"Please provide description for row {index}"})
+                    continue
+            
+                new_status = row.get('status')  
+                if not new_status or pd.isna(new_status) or new_status not in status_choices:
+                    error_Details.append({"error": f"Please provide valid status for row {index}"})
+                    continue
+                labels = row.get('labels')
+                if not labels or pd.isna(labels):
+                    return Response(
+                        {"error": f"Please provide labels for row {index}"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    label_names=labels.split(',')
+                    label_ids=[]    
+                    for label_name in label_names:
+                        label_name=label_name.strip().lower()
+                        if label_name not in label_dict_map:
+                            error_Details.append({"error": f"Please provide valid label name {label_name} for row {index}"})
+                            continue
+                        label_ids.append(label_dict_map[label_name])
+                assignee = row.get('assignee')
+                if not assignee or pd.isna(assignee):
+                    assignee_id=None
+                else:
+                    assignee=str(assignee)
+                    assignee=assignee.strip().lower()
+                    if assignee not in user_dict_map:
+                        error_Details.append({"error": f"Please provide valid assignee name {assignee} for row {index}"})
+                        continue
+                    assignee_id=user_dict_map[assignee] 
+
+                issue_obj = Issue(
+                    title=title,
+                    description=description,
+                    status=new_status,
+                    assignee_id=assignee_id,
+                    created_by=request.user,
+                    updated_by=request.user
+                )
+                objects_to_create.append((issue_obj, label_ids))
+
+            if error_Details:
+                return Response(
+                    {"message":"Please check the error_details to fix the errors in file before importing",    
+                    "error_details": error_Details}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if objects_to_create:
+                issues_only = [item[0] for item in objects_to_create]
+                created_issues = Issue.objects.bulk_create(issues_only)
+                
+                for i, issue in enumerate(created_issues):
+                    original_labels = objects_to_create[i][1]
+                    if original_labels:
+                        issue.labels.set(original_labels)
+
+            return Response({
+                "message": f"Successfully imported {len(objects_to_create)} issues and error while importing {len(error_Details)} issues",
+                "error_details": error_Details
+            }, status=201)
+        
+        except Exception as e:
+            return Response(
+                {"error": f"Error while importing issues: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
