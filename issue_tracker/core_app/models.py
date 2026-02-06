@@ -11,6 +11,9 @@ class Label(models.Model):
     class Meta:
         db_table = 'labels'
 
+    def __str__(self):
+        return f"{self.id} {self.name}"
+
 class Issue(models.Model):
     STATUS_CHOICES = [
         ('open', 'Open'),
@@ -33,6 +36,9 @@ class Issue(models.Model):
     resolved_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
 
+    def __str__(self):
+        return f"{self.id} {self.title} {self.status}"
+
     class Meta:
         db_table = 'issues'
       
@@ -46,6 +52,9 @@ class Comment(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_comments') 
     updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_comments')
     is_deleted = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.id} {self.issue.title} {self.author.username}"
 
     class Meta:
         db_table = 'comments'
