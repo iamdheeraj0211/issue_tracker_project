@@ -101,6 +101,7 @@ class IssueViewSet(viewsets.ViewSet):
                 } if issue.assignee else None,
                 "labels": list(issue.labels.values('id','name').order_by('-id')) if issue.labels.exists() else None,
                 'comments': comments,
+                'version': issue.version,
             }
             return Response({"issue": data})
         except Exception as e:
