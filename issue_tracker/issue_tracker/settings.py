@@ -10,7 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,10 +82,17 @@ WSGI_APPLICATION = 'issue_tracker.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': os.getenv('DB_ENGINE') or os.getenv('LOCAL_PG_DB_ENGINE', 'django.db.backends.sqlite3'),
+        'NAME': os.getenv('DB_NAME') or os.getenv('LOCAL_PG_DB_NAME', BASE_DIR / 'db.sqlite3'),
+        'USER': os.getenv('DB_USER') or os.getenv('LOCAL_PG_DB_USER', ''),
+        'PASSWORD': os.getenv('DB_PASSWORD') or os.getenv('LOCAL_PG_DB_PASSWORD', ''),
+        'HOST': os.getenv('DB_HOST') or os.getenv('LOCAL_PG_DB_HOST', ''),
+        'PORT': os.getenv('DB_PORT') or os.getenv('LOCAL_PG_DB_PORT', ''),
+        'OPTIONS': {
+            'sslmode': os.getenv('DB_SSLMODE') or os.getenv('LOCAL_PG_DB_SSLMODE', 'prefer'),
+        }
     }
-}
+    }
 
 
 # Password validation
