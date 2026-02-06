@@ -18,4 +18,7 @@ urlpatterns += [
     path('issues/bulk-status', IssueViewSet.as_view({'post': 'bulk_status'}), name='issue-bulk-status-update'),
 
     path('issues/import', IssueImportandReportView.as_view({'post': 'import_csv'}), name='issue-import'),
+
+    path('reports/top-assignees', IssueImportandReportView.as_view({'get': 'top_assignee'}), name='issue-top-assignees'),
+    path('reports/latency', IssueImportandReportView.as_view({'get': 'get_average_time'}), name='issue-average-time'),
 ]

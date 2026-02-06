@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from .helpers import CustomCursorPagination
 from django.db import transaction
+from django.db.models import Count
 import pandas as pd
 from django.utils import timezone
 
@@ -348,6 +349,41 @@ class IssueImportandReportView(viewsets.ViewSet):
         except Exception as e:
             return Response(
                 {"error": f"Error while importing issues: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def top_assignee(self,request):
+        try:
+            top_assignee_qs=Issue.objects.filter(assignee__isnull=False).values('assignee__username').annotate(
+                count=Count('assignee__username')
+            ).order_by('-count')[:10]
+            top_assignee_list=[{'assignee':item['assignee__username'],'count':item['count']} for item in top_assignee_qs]   
+            return Response({
+                "message": "Successfully fetched top 10 assignees",
+                "top_assignees": top_assignee_list
+            }, status=200)
+        except Exception as e:
+            return Response(
+                {"error": f"Error while fetching top assignees: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def get_average_time(self,request):
+        try:
+            average_time_qs=Issue.objects.filter(status__in=['closed','resolved'],resolved_at__isnull=False).values('created_at','resolved_at')
+            # print(average_time_qs.count())
+            df=pd.DataFrame(list(average_time_qs))
+            df['created_at']=pd.to_datetime(df['created_at'])
+            df['resolved_at']=pd.to_datetime(df['resolved_at'])
+            df['time_taken']=(df['resolved_at']-df['created_at']).dt.total_seconds()/60 #minutes
+            average_time=df['time_taken'].mean()
+            return Response({
+                "message": "Successfully fetched average time",
+                "average_time": f"{round(average_time,2)} minutes"
+            }, status=200)
+        except Exception as e:
+            return Response(
+                {"error": f"Error while fetching average time: {str(e)}"}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
