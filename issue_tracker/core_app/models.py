@@ -30,8 +30,8 @@ class Issue(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_issues')
-    updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_issues')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_issues' ,null=True, blank=True)
+    updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_issues' ,null=True, blank=True)
     
     resolved_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
@@ -45,12 +45,10 @@ class Issue(models.Model):
 
 class Comment(models.Model):
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name='comments')
-    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    author = models.ForeignKey(User, on_delete=models.CASCADE ,null=True, blank=True)
     comment = models.TextField(null=False, blank=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_comments') 
-    updated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='updated_comments')
     is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
